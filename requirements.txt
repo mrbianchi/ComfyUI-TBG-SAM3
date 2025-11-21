@@ -21,8 +21,12 @@ pycocotools>=2.0.6
 iopath>=0.1.9
 shapely>=1.8.0
 
-# Additional dependencies that SAM3 may need
-# (scipy, scikit-image, matplotlib, pandas are in ComfyUI)
+# SAM 3D Body dependencies
+pyrender
+yacs
+chump
+roma
+pyrootutils
+webdataset
+fvcore
 
-# SAM3 installed via install.py from GitHub
-# git+https://github.com/facebookresearch/sam3.git

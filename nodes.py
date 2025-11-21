@@ -17,6 +17,7 @@ from .sam3_utils import (
     DepthEstimator,
     convert_to_segs
 )
+from .sam3d_body_utils import SAM3DBodyWrapper
 
 
 class SAM3ModelLoader:
@@ -338,15 +339,83 @@ class SAM3DepthMap:
             raise RuntimeError(error_msg)
 
 
+class SAM3DBodyModelLoader:
+    """Load SAM 3D Body model"""
+    
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "model_type": (["dinov3", "vith"], {"default": "dinov3"}),
+                "device": (["cuda", "cpu"], {"default": "cuda"}),
+            }
+        }
+
+    RETURN_TYPES = ("SAM3_BODY_MODEL",)
+    RETURN_NAMES = ("sam3d_body_model",)
+    FUNCTION = "load_model"
+    CATEGORY = "SAM3"
+    DESCRIPTION = "Load SAM 3D Body model. Auto-downloads from HF if needed."
+
+    def load_model(self, model_type: str, device: str) -> Tuple[Any]:
+        wrapper = SAM3DBodyWrapper(device=device)
+        wrapper.load_model(model_type=model_type)
+        return (wrapper,)
+
+class SAM3DBodyRun:
+    """Run SAM 3D Body on an image"""
+    
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "sam3d_body_model": ("SAM3_BODY_MODEL",),
+                "image": ("IMAGE",),
+                "bbox_threshold": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.05}),
+                "use_mask": ("BOOLEAN", {"default": False}),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE", "MASK")
+    RETURN_NAMES = ("visualization", "mesh_mask")
+    FUNCTION = "run_inference"
+    CATEGORY = "SAM3"
+    DESCRIPTION = "Run SAM 3D Body inference to recover 3D human mesh."
+
+    def run_inference(self, sam3d_body_model, image, bbox_threshold, use_mask):
+        # Handle batch
+        if len(image.shape) == 4:
+            img = image[0]
+        else:
+            img = image
+            
+        # Convert tensor to numpy [H, W, 3] (0-255)
+        img_np = (img.cpu().numpy() * 255).astype(np.uint8)
+        
+        vis_img, mask = sam3d_body_model.process_image(img_np, bbox_thr=bbox_threshold, use_mask=use_mask)
+        
+        # Convert vis_img back to tensor [1, H, W, 3] (0-1)
+        vis_tensor = torch.from_numpy(vis_img).float() / 255.0
+        vis_tensor = vis_tensor.unsqueeze(0)
+        
+        # Convert mask to tensor [1, H, W]
+        mask_tensor = torch.from_numpy(mask).float().unsqueeze(0)
+        
+        return (vis_tensor, mask_tensor)
+
 # Node registration
 NODE_CLASS_MAPPINGS = {
     "SAM3ModelLoader": SAM3ModelLoader,
     "SAM3Segmentation": SAM3Segmentation,
     "SAM3DepthMap": SAM3DepthMap,
+    "SAM3DBodyModelLoader": SAM3DBodyModelLoader,
+    "SAM3DBodyRun": SAM3DBodyRun,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "SAM3ModelLoader": "SAM3 Model Loader",
     "SAM3Segmentation": "SAM3 Segmentation",
     "SAM3DepthMap": "SAM3 Depth Map",
+    "SAM3DBodyModelLoader": "SAM 3D Body Model Loader",
+    "SAM3DBodyRun": "SAM 3D Body Run",
 }
